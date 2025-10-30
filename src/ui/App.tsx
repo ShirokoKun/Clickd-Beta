@@ -4,6 +4,7 @@ import { PreviewCanvas } from './PreviewCanvas';
 import { OriginalCanvas } from './OriginalCanvas';
 import { OutputPanel } from './OutputPanel';
 import { useDebounce } from '../hooks/useDebounce';
+import { HelpModal } from './HelpModal';
 import { LIMITS } from '../constants';
 
 export type StippleParams = {
@@ -21,7 +22,9 @@ export type ExportSettings = {
   fps: number;
   durationSec: number;
   resolution: 'source' | '1080p' | '720p';
-  animation: 'none' | 'pulseDensity' | 'sweepThreshold' | 'spinRotation';
+  animation: 'none' | 'pulseDensity' | 'sweepThreshold' | 'spinRotation' | 'waveDispersion' | 'blinkThreshold' | 'iconScalePulse';
+  // optional export format hint
+  format?: 'webm' | 'mp4';
 };
 
 const defaultParams: StippleParams = {
@@ -41,6 +44,7 @@ export default function App() {
   const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
   const [sourceSize, setSourceSize] = useState<{ width: number; height: number } | null>(null);
   const [exportSettings, setExportSettings] = useState<ExportSettings>({ fps: 30, durationSec: 5, resolution: 'source', animation: 'none' });
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const videoUrlRef = useRef<string | null>(null);
 
@@ -108,26 +112,35 @@ export default function App() {
   const memoParams = useDebounce(params, 350);
 
   const ratio = sourceSize ? sourceSize.width / sourceSize.height : 16 / 9;
+  React.useEffect(() => {
+    const onHelp = (e: any) => setHelpOpen(Boolean(e.detail?.open));
+    window.addEventListener('stipple-help', onHelp as any);
+    return () => window.removeEventListener('stipple-help', onHelp as any);
+  }, []);
+
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', height: '100%' }}>
-      <ControlPanel params={params} onParamsChange={setParams} onFile={onFile} exportSettings={exportSettings} onExportSettingsChange={setExportSettings} />
-      <div style={{ display: 'grid', gridTemplateRows: '1fr 200px', padding: 12, gap: 12 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div style={{ background: '#10141f', border: '1px solid #1f2737', borderRadius: 6, padding: 8 }}>
+    <div className="app">
+      <div className="side">
+        <ControlPanel params={params} onParamsChange={setParams} onFile={onFile} exportSettings={exportSettings} onExportSettingsChange={setExportSettings} />
+      </div>
+      <div className="main">
+        <div className="grid2">
+          <div className="card">
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>Original</div>
-            <div style={{ width: '100%', height: '100%', position: 'relative', aspectRatio: `${ratio}` }}>
+            <div className="pane" style={{ aspectRatio: `${ratio}` }}>
               <OriginalCanvas image={imageBitmap} video={videoEl} sourceSize={sourceSize} />
             </div>
           </div>
-          <div style={{ background: '#10141f', border: '1px solid #1f2737', borderRadius: 6, padding: 8 }}>
+          <div className="card">
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>Processed</div>
-            <div style={{ width: '100%', height: '100%', position: 'relative', aspectRatio: `${ratio}` }}>
+            <div className="pane" style={{ aspectRatio: `${ratio}` }}>
               <PreviewCanvas params={memoParams} image={imageBitmap} video={videoEl} sourceSize={sourceSize} exportSettings={exportSettings} />
             </div>
           </div>
         </div>
         <OutputPanel />
       </div>
+      <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
   );
 }

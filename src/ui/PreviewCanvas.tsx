@@ -176,15 +176,28 @@ export function PreviewCanvas({ params, image, video, sourceSize, exportSettings
         else if (t === 'video') {
           if (video && sourceSize) {
             const exportSize = mapExportSize(sourceSize, exportSettings.resolution);
-            const blob = await exportProcessedVideo(video, params, exportSize, {
+            const blobWebM = await exportProcessedVideo(video, params, exportSize, {
               fps: exportSettings.fps,
               bitrate: 10_000_000,
               durationSec: exportSettings.durationSec,
               paramsForFrame: ({ progress }) => applyAnimationPreset(params, exportSettings.animation, progress),
             });
-            const url = URL.createObjectURL(blob);
-            window.dispatchEvent(new CustomEvent('stipple-exported-blob', { detail: { url, type: 'video', name: 'stipple.webm' } }));
-            downloadBlob(blob, 'stipple.webm');
+            if ((exportSettings as any).format === 'mp4') {
+              try {
+                const mp4 = await convertWebMToMp4(blobWebM);
+                const url = URL.createObjectURL(mp4);
+                window.dispatchEvent(new CustomEvent('stipple-exported-blob', { detail: { url, type: 'video', name: 'stipple.mp4' } }));
+                downloadBlob(mp4, 'stipple.mp4');
+              } catch {
+                const url = URL.createObjectURL(blobWebM);
+                window.dispatchEvent(new CustomEvent('stipple-exported-blob', { detail: { url, type: 'video', name: 'stipple.webm' } }));
+                downloadBlob(blobWebM, 'stipple.webm');
+              }
+            } else {
+              const url = URL.createObjectURL(blobWebM);
+              window.dispatchEvent(new CustomEvent('stipple-exported-blob', { detail: { url, type: 'video', name: 'stipple.webm' } }));
+              downloadBlob(blobWebM, 'stipple.webm');
+            }
           } else {
             await exportVideo(canvas, exportSettings.fps, exportSettings.durationSec * 1000, Boolean(video));
           }
@@ -359,16 +372,43 @@ function applyAnimationPreset(p: StippleParams, preset: string, progress: number
     const rotationVariance = Math.max(0, Math.min(45, Math.round(5 + progress * 45)));
     return { ...p, rotationVariance };
   }
+  if (preset === 'waveDispersion') {
+    const dispersionAmount = Math.max(0, Math.min(100, Math.round(50 + Math.sin(progress * Math.PI * 4) * 50)));
+    return { ...p, dispersionAmount };
+  }
+  if (preset === 'blinkThreshold') {
+    const threshold = (progress % 0.25) < 0.125 ? 240 : 60;
+    return { ...p, threshold };
+  }
+  if (preset === 'iconScalePulse') {
+    const iconSize = Math.max(5, Math.min(30, Math.round(p.iconSize * (0.8 + 0.4 * Math.sin(progress * Math.PI * 2)))));
+    return { ...p, iconSize };
+  }
   return p;
+}
+
+async function convertWebMToMp4(webm: Blob): Promise<Blob> {
+  const ffmpegMod = await import('@ffmpeg/ffmpeg');
+  const { createFFmpeg, fetchFile } = ffmpegMod as any;
+  const ffmpeg = createFFmpeg({ log: false });
+  await ffmpeg.load();
+  const data = new Uint8Array(await webm.arrayBuffer());
+  ffmpeg.FS('writeFile', 'input.webm', data);
+  // simple remux/transcode; may be slow in browser
+  await ffmpeg.run('-i', 'input.webm', '-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', 'out.mp4');
+  const mp4 = ffmpeg.FS('readFile', 'out.mp4');
+  return new Blob([mp4.buffer], { type: 'video/mp4' });
 }
 
 function ProgressOverlay() {
   const [pct, setPct] = React.useState(0);
+  const [label, setLabel] = React.useState('');
   React.useEffect(() => {
     const on = (e: any) => {
       const d = e.detail;
       if ((d?.kind === 'export-video' || d?.kind === 'export-gif') && typeof d.progress === 'number') setPct(d.progress);
-      if (d?.kind === 'export-video-start' || d?.kind === 'export-gif-start') setPct(0);
+      if (d?.kind === 'export-video-start') { setPct(0); setLabel('Exporting Video'); }
+      if (d?.kind === 'export-gif-start') { setPct(0); setLabel('Exporting GIF'); }
       if (d?.kind === 'export-video-complete' || d?.kind === 'export-gif-complete') setPct(100);
     };
     window.addEventListener('stipple-progress', on as any);
@@ -376,7 +416,7 @@ function ProgressOverlay() {
   }, []);
   return (
     <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexDirection: 'column', gap: 8 }}>
-      <div>Processing… {pct}%</div>
+      <div>{label || 'Processing…'} {pct}%</div>
       <div style={{ width: 240, height: 6, background: 'rgba(255,255,255,0.2)', borderRadius: 4 }}>
         <div style={{ width: `${pct}%`, height: '100%', background: '#6ea8ff', borderRadius: 4 }} />
       </div>

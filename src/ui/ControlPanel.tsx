@@ -27,7 +27,10 @@ export function ControlPanel({ params, onParamsChange, onFile, exportSettings, o
         />
       </div>
 
-      <VideoControls />
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+        <VideoControls />
+        <Btn onClick={() => window.dispatchEvent(new CustomEvent('stipple-help', { detail: { open: true } }))}>Help</Btn>
+      </div>
       <ExportButtons exportSettings={exportSettings} onExportSettingsChange={onExportSettingsChange} />
 
       <Section title="Density">
@@ -139,6 +142,16 @@ function ExportButtons({ exportSettings, onExportSettingsChange }: { exportSetti
               <option value="pulseDensity">Pulse Density</option>
               <option value="sweepThreshold">Sweep Threshold</option>
               <option value="spinRotation">Spin Rotation</option>
+              <option value="waveDispersion">Wave Dispersion</option>
+              <option value="blinkThreshold">Blink Threshold</option>
+              <option value="iconScalePulse">Icon Scale Pulse</option>
+            </select>
+          </Labeled>
+          <Labeled label="Format">
+            <select value={(exportSettings as any).format || 'webm'} onChange={(e) => onExportSettingsChange({ ...exportSettings, ...( { format: e.target.value } as any) })}
+              style={{ background: '#0f1422', color: '#eaeaea', border: '1px solid #22304a', borderRadius: 6, padding: '6px 8px' }}>
+              <option value="webm">WebM</option>
+              <option value="mp4">MP4 (experimental)</option>
             </select>
           </Labeled>
         </div>
